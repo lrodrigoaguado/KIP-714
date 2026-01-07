@@ -1,139 +1,107 @@
-# Exploration of KIP-714 
+# Exploration of KIP-714
 
-This work is based on https://github.com/Acquitrino/kip-714 
+This work is based on https://github.com/Acquitrino/kip-714
 
 [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) aims to improve monitoring and troubleshooting of Kafka clients by giving operators visibility into client behavior — without requiring changes to application code. Before this KIP, client-internal metrics were hard to collect centrally, making it difficult to diagnose issues like queue buildup, internal latencies, or processing failures from the broker’s perspective.
 
-- [Exploration of KIP-714](#exploration-of-kip-714)
-  - [Disclaimer](#disclaimer)
-  - [Setup](#setup)
-    - [Start Docker Compose](#start-docker-compose)
-    - [Check Control Center](#check-control-center)
-  - [Requirements](#requirements)
-  - [Major Configurations](#major-configurations)
-  - [Kafka Client Metrics](#kafka-client-metrics)
-  - [Prometheus metrics](#prometheus-metrics)
-    - [Leveraging C3++ Prometheus](#leveraging-c3-prometheus)
-  - [Kafka Clients](#kafka-clients)
-  - [Cleanup](#cleanup)
-
 ## Disclaimer
 
-The code and/or instructions here available are **NOT** intended for production usage. 
+The code and/or instructions here available are **NOT** intended for production usage.
 It's only meant to serve as an example or reference and does not replace the need to follow actual and official documentation of referenced products.
 
-## Setup
+## Prerequisites
 
-### Start Docker Compose
+- **Docker**: To run the Kafka cluster and observability stack.
+- **Java 21**: To compile and run the Kafka clients.
+- **Maven 3.8+**: To build the project.
+
+## Quick Start
+
+### 1. Start the Environment
+
+Start the Docker Compose services, which include 3 Kafka Brokers, Confluent Control Center, Prometheus, Alertmanager, and an OpenTelemetry Collector.
 
 ```bash
 docker compose up -d
 ```
 
-### Check Control Center
+### 2. Build the Kafka Clients
 
-Open http://localhost:9021 and check cluster is healthy including Kafka Connect.
+Navigate to the `kafka-clients` directory and build the project.
 
-## Requirements
-
-- C3++ (Next Gen) is not required for KIP-714 (only Prometheus for the exposure)
-- CP Minimal version 8.0.0
-- C3++ Minimal version 2.3.0
-
-## Major Configurations
-
-A Subscription must be crated in order to instruct Kafka clients with the set of Metrics they should report and how often. You can also specify some filters on the clients who should be reporting into such Subscription (match config.)
-
-- Enable the feature: KAFKA_CONFLUENT_TELEMETRY_EXTERNAL_CLIENT_METRICS_PUSH_ENABLED: "true"
-- A Prometheus Compatibility config: KAFKA_CONFLUENT_TELEMETRY_EXTERNAL_CLIENT_METRICS_DELTA_TEMPORALITY: "false"
-- How often clients should report the Metrics: KAFKA_CONFLUENT_TELEMETRY_EXTERNAL_CLIENT_METRICS_SUBSCRIPTION_INTERVAL_MS_LIST: "5000"
-- Create a Telemetry Subscription including all the available client metrics (KIP-714) or the bare minimum required for C3: KAFKA_CONFLUENT_TELEMETRY_EXTERNAL_CLIENT_METRICS_SUBSCRIPTION_METRICS_LIST: "*"
-- After metrics are reported by clients on the Broker side they need to be stored somewhere, that’s the role of the Metrics Plugin. For Confluent Platform the Metric Plugin is: KAFKA_METRIC_REPORTERS: io.confluent.telemetry.reporter.TelemetryReporter
-- The Metrics Plugin must also be instructed with the set of Metrics that must be stored: KAFKA_CONFLUENT_TELEMETRY_EXPORTER_C3PLUSPLUS_METRICS_INCLUDE: "io.confluent.kafka.server.request.(?!.*delta).*|io.confluent.kafka.server.server.broker.state|io.confluent.kafka.server.replica.manager.leader.count|io.confluent.kafka.server.request.queue.size|io.confluent.kafka.server.broker.topic.failed.produce.requests.rate.1.min|io.confluent.kafka.server.tier.archiver.total.lag|io.confluent.kafka.server.request.total.time.ms.p99|io.confluent.kafka.server.broker.topic.failed.fetch.requests.rate.1.min|io.confluent.kafka.server.broker.topic.total.fetch.requests.rate.1.min|io.confluent.kafka.server.partition.caught.up.replicas.count|io.confluent.kafka.server.partition.observer.replicas.count|io.confluent.kafka.server.tier.tasks.num.partitions.in.error|io.confluent.kafka.server.broker.topic.bytes.out.rate.1.min|io.confluent.kafka.server.request.total.time.ms.p95|io.confluent.kafka.server.controller.active.controller.count|io.confluent.kafka.server.request.total.time.ms.p999|io.confluent.kafka.server.controller.active.broker.count|io.confluent.kafka.server.request.handler.pool.request.handler.avg.idle.percent.rate.1.min|io.confluent.kafka.server.controller.unclean.leader.elections.rate.1.min|io.confluent.kafka.server.replica.manager.partition.count|io.confluent.kafka.server.controller.unclean.leader.elections.total|io.confluent.kafka.server.partition.replicas.count|io.confluent.kafka.server.broker.topic.total.produce.requests.rate.1.min|io.confluent.kafka.server.controller.offline.partitions.count|io.confluent.kafka.server.socket.server.network.processor.avg.idle.percent|io.confluent.kafka.server.partition.under.replicated|io.confluent.kafka.server.log.log.start.offset|io.confluent.kafka.server.log.tier.size|io.confluent.kafka.server.log.size|io.confluent.kafka.server.tier.fetcher.bytes.fetched.total|io.confluent.kafka.server.request.total.time.ms.p50|io.confluent.kafka.server.tenant.consumer.lag.offsets|io.confluent.kafka.server.log.log.end.offset|io.confluent.kafka.server.broker.topic.bytes.in.rate.1.min|io.confluent.kafka.server.partition.under.min.isr|io.confluent.kafka.server.partition.in.sync.replicas.count|io.confluent.telemetry.http.exporter.batches.dropped|io.confluent.telemetry.http.exporter.items.total|io.confluent.telemetry.http.exporter.items.succeeded|io.confluent.telemetry.http.exporter.send.time.total.millis|io.confluent.kafka.server.controller.leader.election.rate.(?!.*delta).*|io.confluent.telemetry.http.exporter.batches.failed|org.apache.kafka.producer.*|org.apache.kafka.consumer.*"
-(**Important Note**: * it’s not working … → FATAL ERROR: org.apache.kafka.common.config.ConfigException: Failed to create exporter config for exporter 'c3plusplus'. Reason: Metrics filter for configurationmetrics.include is not a valid regular expression)
-- How often the Plugin will flush into Prometheus: KAFKA_CONFLUENT_TELEMETRY_METRICS_COLLECTOR_INTERVAL_MS: "60000"
-
-## Kafka Client Metrics
-
-```shell
-kafka-client-metrics --bootstrap-server broker:9092 --list
+```bash
+cd kafka-clients
+mvn clean compile package
 ```
 
-You should get:
+### 3. Run the Producer
 
-```
-default-0
-```
+Run the producer application. By default, it produces alphanumeric strings to the `test-queues` topic using the client ID `kip-714-producer-demo`.
 
-```shell
-kafka-client-metrics --bootstrap-server broker:9092 --describe
+```bash
+mvn exec:java@run-producer
 ```
 
-You should get:
+### 4. Run the Consumer
 
-```
-Client metrics configs for default-0 are:
-  interval.ms=300000
-  match=
-  metrics=
-```
+Open a new terminal, navigate to `kafka-clients`, and run the consumer application.
 
-Hardcoded? The interval.ms seems to ignore our settings;:
-KAFKA_CONFLUENT_TELEMETRY_EXTERNAL_CLIENT_METRICS_SUBSCRIPTION_INTERVAL_MS_LIST: "5000"
-
-The metrics defined as per our configuration are also not being listed.
-
-## Prometheus metrics
-
-If we go to Prometheus http://localhost:9090/query we can see client metrics exposed by querying for example: ``org_apache_kafka_producer_``
-
-![Prometheus Client Metrics](img/prometheus_client_metrics.png)
-
-### Leveraging C3++ Prometheus
-
-- C3++ needs a dedicated Prometheus instance. The supported option is to use the embedded Prometheus and only for C3 monitoring. Risk of performance degradation if used for other purposes.
-- Prometheus embedded with C3++ can be used to connect with Grafana for collected metrics visualization but should not be customized to ingest custom metrics.
-
-## Kafka Clients
-
-Let's create a producer:
-
-```shell
-kafka-console-producer --bootstrap-server localhost:9092 --topic input
+```bash
+mvn exec:java@run-consumer
 ```
 
-And produce to it something like following:
+## Observability
 
+Once the clients are running, you can explore the metrics generated by KIP-714.
+
+### Control Center
+
+Open Confluent Control Center at [http://localhost:9021](http://localhost:9021).
+1.  Navigate to the cluster.
+2.  Click on the **Clients** tab in the left-hand menu.
+3.  You will see a list of connected clients (e.g., `kip-714-producer-demo`, `consumer-demo-group-1`).
+4.  Click on a client ID to view its specific metrics dashboard.
+
+**Producer in Control Center:**
+![Producer in Control Center](img/Producer_in_cc.png)
+
+**Consumer in Control Center:**
+![Consumer in Control Center](img/Consumer_in_cc.png)
+
+### Prometheus
+
+For advanced analysis and access to metrics not visible in Control Center, you can query Prometheus directly at [http://localhost:9090](http://localhost:9090).
+
+**Why use Prometheus?**
+While Control Center displays a curated set of 6 key metrics, KIP-714 exposes a vast array of internal client metrics. Prometheus allows you to query **any** of them.
+
+**Query Examples:**
+
+**1. Producer Batch Size Average**
+View the average batch size for your specific producer:
+[Click to Query](http://localhost:9090/query?g0.expr=org_apache_kafka_producer_batch_size_avg%7Bclient_external_client_id%3D%22kip-714-producer-demo%22%7D&g0.show_tree=0&g0.tab=graph&g0.range_input=5m&g0.res_type=auto&g0.res_density=medium&g0.display_mode=lines&g0.show_exemplars=0)
+
+```prometheus
+org_apache_kafka_producer_batch_size_avg{client_external_client_id="kip-714-producer-demo"}
 ```
->asd
-[2025-12-28 18:46:45,078] WARN [Producer clientId=console-producer] The metadata response from the cluster reported a recoverable issue with correlation id 5 : {input=UNKNOWN_TOPIC_OR_PARTITION} (org.apache.kafka.clients.NetworkClient)
->asd
->asd
->asd
->asd
->asd
->    
+
+**Producer Metric in Prometheus:**
+![Producer in Prometheus](img/Producer_in_prometheus.png)
+
+**2. Consumer I/O Wait Ratio**
+View the I/O wait ratio for your specific consumer group:
+[Click to Query](http://localhost:9090/query?g0.expr=org_apache_kafka_consumer_io_wait_ratio%7Bclient_external_client_id%3D%22consumer-demo-group-1%22%7D&g0.show_tree=0&g0.tab=graph&g0.range_input=5m&g0.res_type=auto&g0.res_density=medium&g0.display_mode=lines&g0.show_exemplars=0)
+
+```prometheus
+org_apache_kafka_consumer_io_wait_ratio{client_external_client_id="consumer-demo-group-1"}
 ```
 
-If we check on C3:
-
-![C3 Producer](img/c3_producer.png)
-
-For consumer:
-
-```shell
-kafka-console-consumer --bootstrap-server localhost:9092 --topic input --from-beginning
-```
-
-And we get on C3:
-
-![C3 Consumer](img/c3_consumer.png)
-
-And on Prometheus:
-
-![Prometheus Producer](img/prometheus_producer.png)
+**Consumer Metric in Prometheus:**
+![Consumer in Prometheus](img/Consumer_in_prometheus.png)
 
 ## Cleanup
+
+To stop the environment and remove volumes (resetting data):
 
 ```bash
 docker compose down -v
