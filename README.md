@@ -42,6 +42,23 @@ Run the producer application. By default, it produces alphanumeric strings to th
 mvn exec:java@run-producer
 ```
 
+**Custom Parameters:**
+
+You can optionally specify the **Topic Name** and **Client ID** as command-line arguments:
+
+```bash
+mvn exec:java@run-producer -Dexec.args="<topic_name> <client_id>"
+```
+
+**Example:**
+
+```bash
+mvn exec:java@run-producer -Dexec.args="my-topic my-custom-client-id"
+```
+
+- **Argument 1 (`topic_name`)**: The topic to produce to (Default: `test-queues`).
+- **Argument 2 (`client_id`)**: The client ID for the producer (Default: `kip-714-producer-demo`).
+
 ### 4. Run the Consumer
 
 Open a new terminal, navigate to `kafka-clients`, and run the consumer application.
@@ -49,6 +66,22 @@ Open a new terminal, navigate to `kafka-clients`, and run the consumer applicati
 ```bash
 mvn exec:java@run-consumer
 ```
+
+**Custom Parameters:**
+
+You can optionally specify the **Group ID** as a command-line argument:
+
+```bash
+mvn exec:java@run-consumer -Dexec.args="<group_id>"
+```
+
+**Example:**
+
+```bash
+mvn exec:java@run-consumer -Dexec.args="my-custom-group"
+```
+
+- **Argument 1 (`group_id`)**: The consumer group ID (Default: `demo-group`).
 
 ## Observability
 
