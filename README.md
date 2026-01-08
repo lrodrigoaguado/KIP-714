@@ -132,6 +132,15 @@ org_apache_kafka_consumer_io_wait_ratio{client_external_client_id="consumer-demo
 **Consumer Metric in Prometheus:**
 ![Consumer in Prometheus](img/Consumer_in_prometheus.png)
 
+## Configuration Notes
+
+- **Control Center & External Metrics**: If `KAFKA_CONFLUENT_TELEMETRY_EXTERNAL_CLIENT_METRICS_PUSH_ENABLED` is set to `false`, Control Center will display a screen explaining the required parameters to use this functionality.
+  ![Configuration Screen](img/kip714_example_config.png)
+
+- **Metric Filtering**: Configuration of `KAFKA_CONFLUENT_TELEMETRY_EXPORTER_C3PLUSPLUS_METRICS_INCLUDE` as `(.)*` will move *all* Kafka broker MBeans and client subscriptions to Prometheus.
+  > [!WARNING]
+  > This setting (`(.)*`) is convenient for this demo environment but **should not be used in production**. It creates significant pressure on Prometheus. For production, explicitly select only the metrics you need to export.
+
 ## Cleanup
 
 To stop the environment and remove volumes (resetting data):
