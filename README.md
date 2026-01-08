@@ -1,6 +1,6 @@
 # Exploration of KIP-714
 
-This work is based on https://github.com/Acquitrino/kip-714
+This work is based on https://github.com/Acquitrino/kip-714 and https://github.com/rjmfernandes/kip714
 
 [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) aims to improve monitoring and troubleshooting of Kafka clients by giving operators visibility into client behavior — without requiring changes to application code. Before this KIP, client-internal metrics were hard to collect centrally, making it difficult to diagnose issues like queue buildup, internal latencies, or processing failures from the broker’s perspective.
 
